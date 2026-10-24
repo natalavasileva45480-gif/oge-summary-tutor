@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конструктор промптов ОГЭ</title>
+    <script src="library.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            max-width: 700px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+        }
+        h2 { color: #2c3e50; text-align: center; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px; }
+        
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; color: #34495e; }
+        
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e6ed;
+            border-radius: 8px;
+            font-size: 15px;
+            background-color: #fff;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+        select:focus { border-color: #3498db; outline: none; }
+        
+        .original-text-preview {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #555;
+            margin-top: 10px;
+            display: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .meta-info { font-size: 12px; color: #7f8c8d; margin-bottom: 8px; font-weight: bold; }
+        .paragraph { margin-bottom: 10px; }
+        .paragraph:last-child { margin-bottom: 0; }
+        .paragraph-label { 
+            display: inline-block; 
+            background: #3498db; 
+            color: white; 
+            padding: 2px 8px; 
+            border-radius: 3px; 
+            font-size: 11px; 
+            margin-right: 8px; 
+            font-weight: bold;
+        }
+
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 17px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s, box-shadow 0.2s;
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+            margin-top: 25px;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(46, 204, 113, 0.4); }
+        .btn:active { transform: translateY(0); }
+        .btn.copied { background: linear-gradient(135deg, #27ae60, #219150); }
+
+        .hint-box {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 25px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #856404;
+        }
+        .hint-box strong { color: #d35400; }
+        
+        .stats {
+            text-align: center;
+            font-size: 13px;
+            color: #7f8c8d;
+            margin-top: 15px;
+        }
+        
+        .error-box {
+            background-color: #fee;
+            border: 1px solid #fcc;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #c0392b;
+            font-size: 14px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>📝 Конструктор промптов для проверки ОГЭ</h2>
+    <p class="subtitle">Выберите вариант изложения, сгенерируйте промпт и прикрепите фото работы в нейросеть</p>
+
+    <div id="errorBox" class="error-box"></div>
+
+    <div class="form-group">
+        <label for="variantSelect">Выберите вариант изложения:</label>
+        <select id="variantSelect" onchange="showOriginalText()">
+            <option value="">-- Загрузка вариантов... --</option>
+        </select>
+    </div>
+
+    <div id="previewBlock" class="original-text-preview">
+        <div class="meta-info" id="metaInfo"></div>
+        <div id="originalTextContent"></div>
+    </div>
+
+    <button id="generateBtn" class="btn" onclick="generateAndCopy()">✨ Сгенерировать и скопировать промпт</button>
+    
+    <div class="stats" id="statsInfo">Инициализация...</div>
+
+    <div class="hint-box">
+        <strong>🚀 Инструкция для ученика:</strong><br>
+        1. Нажми кнопку выше (промпт скопируется в буфер обмена).<br>
+        2. Открой любую нейросеть с поддержкой фото (YandexGPT, GigaChat, ChatGPT, Claude).<br>
+        3. Вставь текст (<strong>Ctrl+V</strong>).<br>
+        4. <strong>Прикрепи фотографию</strong> своего рукописного изложения к этому же сообщению и нажми «Отправить».
+    </div>
+
+    <script>
+        // Диагностика: проверяем, загрузилась ли библиотека
+        if (typeof ogeLibrary === 'undefined') {
+            document.getElementById('errorBox').style.display = 'block';
+            document.getElementById('errorBox').innerHTML = 
+                '<b>⚠️ Ошибка:</b> Файл library.js не загрузился или содержит ошибку.<br>' +
+                'Убедитесь, что файл library.js находится в той же папке, что и index.html.<br>' +
+                'Откройте консоль браузера (F12) для просмотра деталей.';
+            document.getElementById('statsInfo').innerText = 'Библиотека не загружена';
+        } else {
+            document.addEventListener('DOMContentLoaded', function() {
+                populateVariants();
+            });
+        }
+
+        // Заполнение списка вариантов
+        function populateVariants() {
+            const variantSelect = document.getElementById('variantSelect');
+            variantSelect.innerHTML = '';
+            
+            const keys = Object.keys(ogeLibrary);
+            document.getElementById('statsInfo').innerText = `Всего вариантов в базе: ${keys.length}`;
+            
+            if (keys.length === 0) {
+                variantSelect.innerHTML = '<option value="">-- Библиотека пуста --</option>';
+                return;
+            }
+            
+            keys.forEach(key => {
+                const data = ogeLibrary[key];
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = `${data.variant} — "${data.theme}" (${data.words} сл.)`;
+                variantSelect.appendChild(option);
+            });
+            
+            variantSelect.selectedIndex = 0;
+            showOriginalText();
+        }
+
+        // Показ исходного текста
+        function showOriginalText() {
+            const key = document.getElementById('variantSelect').value;
+            const previewBlock = document.getElementById('previewBlock');
+            
+            if (!key || !ogeLibrary[key]) {
+                previewBlock.style.display = 'none';
+                return;
+            }
+            
+            const data = ogeLibrary[key];
+            document.getElementById('metaInfo').textContent = 
+                `📌 ${data.variant} | Тема: ${data.theme} | ~${data.words} слов в оригинале`;
+            
+            const paragraphs = data.text.split('\n\n');
+            let html = '';
+            paragraphs.forEach((p, idx) => {
+                html += `<div class="paragraph"><span class="paragraph-label">Абзац ${idx + 1}</span>${p}</div>`;
+            });
+            document.getElementById('originalTextContent').innerHTML = html;
+            previewBlock.style.display = 'block';
+        }
+
+        // Генерация и копирование промпта
+        function generateAndCopy() {
+            const key = document.getElementById('variantSelect').value;
+            if (!key || !ogeLibrary[key]) {
+                alert("Пожалуйста, выберите вариант изложения.");
+                return;
+            }
+
+            const data = ogeLibrary[key];
+            
+            const fullPrompt = `Ты — опытный, строгий и профессиональный эксперт ФИПИ по проверке ОГЭ по русскому языку.
+
+К этому сообщению я прикрепляю ФОТОГРАФИЮ рукописного сжатого изложения ученика.
+
+Твоя задача — провести комплексный лингвистический и критериальный анализ этой работы строго по официальным правилам экзамена.
+
+📌 ВАРИАНТ: ${data.variant}
+📌 ТЕМА: ${data.theme}
+📌 ОБЪЁМ ОРИГИНАЛА: ~${data.words} слов
+
+📌 ИСХОДНЫЙ ТЕКСТ, который слушал ученик (для сверки микротем и фактов):
+"""
+${data.text}
+"""
+
+📌 ОФИЦИАЛЬНЫЕ КРИТЕРИИ ОГЭ, по которым ты обязан оценить работу:
+1. ИК1 (Содержание): Отражены ли все 3 микротемы исходного текста? (Макс. 2 балла).
+2. ИК2 (Сжатие): Применил ли ученик приёмы сжатия (исключение, обобщение, упрощение) ко всем 3 микротемам? (Макс. 3 балла).
+3. ИК3 (Смысловая цельность): Проверь логику, связность и деление текста ровно на 3 абзаца. (Макс. 2 балла).
+4. ГК1 (Орфография): Подсчитай орфографические ошибки. (Макс. 2 балла).
+5. ГК2 (Пунктуация): Подсчитай пунктуационные ошибки. (Макс. 2 балла).
+6. ГК3 (Грамматика): Подсчитай грамматические ошибки. (Макс. 2 балла).
+7. ГК4 (Речь): Подсчитай речевые ошибки. (Макс. 2 балла).
+8. ФК1 (Фактическая точность): Нет ли искажений фактов исходного текста? (Макс. 1 балл).
+
+📌 ДЕЙСТВУЙ СТРОГО ПО ЭТОЙ ИНСТРУКЦИИ:
+
+Шаг 1. ТОЧНАЯ РАСШИФРОВКА ПОЧЕРКА
+Внимательно прочитай рукописный текст на фотографии. Транскрибируй его дословно в блок "Текст ученика".
+️ ВАЖНО: Не исправляй ошибки! Сохраняй все реальные орфографические и пунктуационные ошибки ровно так, как их написал ученик. Если слово нечитаемо, напиши [неразборчиво].
+
+Шаг 2. АНАЛИЗ ОШИБОК
+Составь чёткий список найденных ошибок по группам (ГК1–ГК4). Для каждой ошибки укажи: слово из текста ученика → правильный вариант → краткое правило.
+
+Шаг 3. ВЫСТАВЛЕНИЕ БАЛЛОВ
+Выведи результаты в виде таблицы: | Критерий | Макс. балл | Балл ученика | Пояснение |.
+В конце подсчитай СУММАРНЫЙ БАЛЛ (максимум 16) и переведи его в оценку (2, 3, 4 или 5) по шкале ОГЭ.
+
+Шаг 4. РЕКОМЕНДАЦИИ РЕПЕТИТОРА
+Напиши поддерживающий блок советов:
+- 2–3 конкретных правила, которые нужно повторить.
+- Оценка качества сжатия (где можно было сжать лучше).
+- Краткое напутствие, как добавить 2–3 балла в следующий раз.`;
+
+            navigator.clipboard.writeText(fullPrompt).then(() => {
+                const btn = document.getElementById('generateBtn');
+                const originalText = btn.innerText;
+                btn.innerText = "✅ Промпт скопирован! Открывай нейросеть!";
+                btn.classList.add('copied');
+                
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.classList.remove('copied');
+                }, 3000);
+            }).catch(err => {
+                alert("Не удалось скопировать автоматически. Пожалуйста, выделите и скопируйте текст вручную.");
+                console.error(err);
+            });
+        }
+    </script>
+</body>
+</html>
